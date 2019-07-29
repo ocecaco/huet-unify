@@ -39,5 +39,5 @@ normalizeTerm (IfThenElse cond t1 t2) = do
 
 doNormalizeTerm :: Term -> Term
 doNormalizeTerm tm = case run (normalizeTerm tm) of
-  Left err -> error "unexpected type error while normalizing"
+  Left _ -> error "unexpected type error while normalizing"
   Right t -> t

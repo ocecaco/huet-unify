@@ -1,9 +1,10 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-module TypeCheck (doInferType, TC(..)) where
+module TypeCheck (doInferType, TC(..), run) where
 
 import Syntax
 import Data.Text (Text)
+import qualified Data.Text as T
 import Control.Monad.Identity
 import Control.Monad.Except
 import Control.Monad.State.Strict
@@ -69,7 +70,8 @@ inferType (Var (Bound _ _)) = error "type checker encountered bound variable"
 
 inferType (Abs ty scope) = do
   (x, body) <- unbindTerm scope
-  withContext x ty (inferType body)
+  resty <- withContext x ty (inferType body)
+  return (ty --> resty)
 
 inferType (fun :@ arg) = do
   funty <- inferType fun
@@ -78,7 +80,7 @@ inferType (fun :@ arg) = do
     argty :-> resultty -> do
       checkEqual argty actualty
       return resultty
-    _ -> typeError "expected function type"
+    _ -> typeError $ "expected function type, got " <> T.pack (show funty)
 
 run :: TC a -> Either TypeError a
 run act = runIdentity (runExceptT (evalStateT (runReaderT (runTC act) initialContext) initialState))

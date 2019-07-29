@@ -1,20 +1,4 @@
-module Syntax
-  ( Term(..)
-  , Ty(..)
-  , Const(..)
-  , bindTerm
-  , unbindTerm
-  , openTerm
-  , substTerm
-  , Name(..)
-  , Var(..)
-  , Scope
-  , Ignore(..)
-  , MonadFresh(..)
-  , TermName
-  , TermScope
-  , TermVar)
-where
+module Syntax where
 
 import Data.Text (Text)
 
@@ -38,9 +22,9 @@ instance Ord (Ignore a) where
 class Monad m => MonadFresh m where
   fresh :: Name f -> m (Name f)
 
-type TermName = Name (Ignore Text)
-type TermVar = Var (Ignore Text) ()
-type TermScope = Scope TermName Term
+type TermName = Name Text
+type TermVar = Var Text ()
+type TermScope = Scope (Ignore TermName) Term
 
 data Const = ConstI Int
            | ConstB Bool
@@ -61,7 +45,7 @@ infixr :->
 infixl :@
 
 bindTerm :: TermName -> Term -> TermScope
-bindTerm bindname bindterm = Scope bindname (go 0 bindterm)
+bindTerm bindname bindterm = Scope (Ignore bindname) (go 0 bindterm)
   where go :: Int -> Term -> Term
         go _ tm@(Const _) = tm
         go k (Plus t1 t2) = Plus (go k t1) (go k t2)
@@ -93,7 +77,7 @@ openTerm (Scope _ body) sub = go 0 body
         goScope k (Scope name inner) = Scope name (go (k + 1) inner)
 
 unbindTerm :: MonadFresh m => TermScope -> m (TermName, Term)
-unbindTerm scope@(Scope origname _) = do
+unbindTerm scope@(Scope (Ignore origname) _) = do
   freshname <- fresh origname
   return (freshname, openTerm scope (Var (Free freshname)))
 
@@ -114,3 +98,36 @@ substTerm subname sub = go
 
         goScope :: TermScope -> TermScope
         goScope (Scope name inner) = Scope name (go inner)
+
+lam :: Text -> Ty -> Term -> Term
+lam name ty body = Abs ty (bindTerm (Name name 0) body)
+
+(@@) :: Term -> Term -> Term
+t1 @@ t2 = t1 :@ t2
+
+v :: Text -> Term
+v name = Var (Free (Name name 0))
+
+i :: Int -> Term
+i nv = Const (ConstI nv)
+
+b :: Bool -> Term
+b bv = Const (ConstB bv)
+
+ifthenelse :: Term -> Term -> Term -> Term
+ifthenelse = IfThenElse
+
+(+.) :: Term -> Term -> Term
+t1 +. t2 = Plus t1 t2
+
+int :: Ty
+int = Int
+
+bool :: Ty
+bool = Bool
+
+(-->) :: Ty -> Ty -> Ty
+ty1 --> ty2 = ty1 :-> ty2
+
+infixl @@
+infixr -->
