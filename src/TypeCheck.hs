@@ -47,14 +47,11 @@ checkEqual ty1 ty2
   | ty1 == ty2 = return ()
   | otherwise = typeError "type mismatch"
 
-checkType :: Term -> Ty -> TC ()
-checkType tm expectty = do
-  actualty <- inferType tm
-  checkEqual expectty actualty
-
 inferType :: Term -> TC Ty
 inferType (Const (ConstI _)) = return Int
 inferType (Const (ConstB _)) = return Bool
+inferType (Const Plus) = return (Int :-> Int :-> Int)
+inferType (Const (IfThenElse ty)) = return (Bool :-> ty :-> ty :-> ty)
 
 inferType (Var (Free name)) = lookupType name
 inferType (Var (Bound _ _)) = error "type checker encountered bound variable"

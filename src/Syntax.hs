@@ -70,8 +70,8 @@ openTerm (Scope _ body) sub = go 0 body
   where go :: Int -> Term -> Term
         go _ tm@(Const _) = tm
         go _ tm@(Var (Free _)) = tm
-        go k tm@(Var (Bound i ()))
-          | k == i = sub
+        go k tm@(Var (Bound j ()))
+          | k == j = sub
           | otherwise = tm
         go k (t1 :@ t2) = go k t1 :@ go k t2
         go k (Abs ty scope) = Abs ty (goScope k scope)

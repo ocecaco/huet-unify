@@ -6,7 +6,6 @@ import Syntax
 import TypeCheck
 import Control.Monad
 import Data.List
-import Debug.Trace (traceM)
 
 normalizeTerm :: Term -> TC Term
 normalizeTerm c@(Const _) = return c
