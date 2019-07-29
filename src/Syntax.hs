@@ -24,20 +24,23 @@ instance Ord (Ignore a) where
 class Monad m => MonadFresh m where
   fresh :: Name f -> m (Name f)
 
+freshFromRawName :: MonadFresh m => f -> m (Name f)
+freshFromRawName raw = fresh (Name raw 0)
+
 type TermName = Name Text
 type TermVar = Var Text ()
 type TermScope = Scope (Ignore TermName) Term
 
 data Const = ConstI Int
            | ConstB Bool
+           | Plus
+           | IfThenElse Ty
            deriving (Eq, Ord, Show)
 
 data Term = Term :@ Term -- application
           | Abs Ty TermScope -- lambda-abstraction
           | Var TermVar -- free/bound variable
           | Const Const -- constants
-          | Plus Term Term -- addition
-          | IfThenElse Term Term Term -- if-then-else conditional
           deriving (Eq, Ord, Show)
 
 data Ty = Ty :-> Ty
@@ -52,8 +55,6 @@ bindTerm :: TermName -> Term -> TermScope
 bindTerm bindname bindterm = Scope (Ignore bindname) (go 0 bindterm)
   where go :: Int -> Term -> Term
         go _ tm@(Const _) = tm
-        go k (Plus t1 t2) = Plus (go k t1) (go k t2)
-        go k (IfThenElse cond t1 t2) = IfThenElse (go k cond) (go k t1) (go k t2)
         go k tm@(Var (Free occurname))
           | bindname == occurname = Var (Bound k ())
           | otherwise = tm
@@ -68,8 +69,6 @@ openTerm :: TermScope -> Term -> Term
 openTerm (Scope _ body) sub = go 0 body
   where go :: Int -> Term -> Term
         go _ tm@(Const _) = tm
-        go k (Plus t1 t2) = Plus (go k t1) (go k t2)
-        go k (IfThenElse cond t1 t2) = IfThenElse (go k cond) (go k t1) (go k t2)
         go _ tm@(Var (Free _)) = tm
         go k tm@(Var (Bound i ()))
           | k == i = sub
@@ -89,8 +88,6 @@ substTerm :: TermName -> Term -> Term -> Term
 substTerm subname sub = go
   where go :: Term -> Term
         go tm@(Const _) = tm
-        go (Plus t1 t2) = Plus (go t1) (go t2)
-        go (IfThenElse cond t1 t2) = IfThenElse (go cond) (go t1) (go t2)
         go tm@(Var (Free occurname))
           | subname == occurname = sub
           | otherwise = tm
@@ -118,11 +115,11 @@ i nv = Const (ConstI nv)
 b :: Bool -> Term
 b bv = Const (ConstB bv)
 
-ifthenelse :: Term -> Term -> Term -> Term
-ifthenelse = IfThenElse
+ifthenelse :: Ty -> Term -> Term -> Term -> Term
+ifthenelse ty cond t1 t2 = Const (IfThenElse ty) @@ cond @@ t1 @@ t2
 
 (+.) :: Term -> Term -> Term
-t1 +. t2 = Plus t1 t2
+t1 +. t2 = Const Plus @@ t1 @@ t2
 
 int :: Ty
 int = Int

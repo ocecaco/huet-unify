@@ -1,6 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-module TypeCheck (doInferType, TC(..), run) where
+module TypeCheck (doInferType, TC(..), run, inferType) where
 
 import Syntax
 import Data.Text (Text)
@@ -52,18 +52,6 @@ checkType tm expectty = do
 inferType :: Term -> TC Ty
 inferType (Const (ConstI _)) = return Int
 inferType (Const (ConstB _)) = return Bool
-
-inferType (Plus t1 t2) = do
-  checkType t1 Int
-  checkType t2 Int
-  return Int
-
-inferType (IfThenElse cond t1 t2) = do
-  checkType cond Bool
-  ty1 <- inferType t1
-  ty2 <- inferType t2
-  checkEqual ty1 ty2
-  return ty1
 
 inferType (Var (Free name)) = lookupType name
 inferType (Var (Bound _ _)) = error "type checker encountered bound variable"
