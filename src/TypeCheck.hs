@@ -1,6 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-module TypeCheck (doInferType, TC(..), run, inferType) where
+module TypeCheck (doInferType, TC(..), run, inferType, withContext, withContextTelescope) where
 
 import Syntax
 import Data.Text (Text)
@@ -31,6 +31,9 @@ typeError msg = TC (throwError msg)
 
 withContext :: TermName -> Ty -> TC a -> TC a
 withContext name ty (TC act) = TC $ local (\(TCContext ctxt) -> TCContext (M.insert name ty ctxt)) act
+
+withContextTelescope :: [(TermName, Ty)] -> TC a -> TC a
+withContextTelescope binders act = foldr (uncurry withContext) act binders
 
 lookupType :: TermName -> TC Ty
 lookupType name = TC $ do

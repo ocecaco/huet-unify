@@ -36,18 +36,20 @@ etaExpand tm = do
   ty <- inferType tm
   let argTypes = collectArgTypes ty
   (binders, (hd, args)) <- collectLambdas tm
-  argsExpanded <- mapM etaExpand args
-  let expandedSpine = createSpine hd argsExpanded
+  argsExpanded <- withContextTelescope binders $ mapM etaExpand args
 
   let missingBinderTypes = drop (length binders) argTypes
   missingBinderNames <- replicateM (length missingBinderTypes) (freshFromRawName "eta")
+  let missingBinderVars = map (Var . Free) missingBinderNames
   let missingBinders = zip missingBinderNames missingBinderTypes
 
-  let withNewApps = foldl' (:@) expandedSpine (map (Var . Free) missingBinderNames)
-  let withNewBinders = foldr addBinder withNewApps (binders ++ missingBinders)
+  let newArgs = argsExpanded ++ missingBinderVars
+  let newBinders = binders ++ missingBinders
+
+  let expanded = foldr addBinder (createSpine hd newArgs) newBinders
         where addBinder (bindname, bindty) inner = Abs bindty (bindTerm bindname inner)
 
-  return withNewBinders
+  return expanded
 
 collectArgTypes :: Ty -> [Ty]
 collectArgTypes (ty1 :-> ty2) = ty1 : collectArgTypes ty2
