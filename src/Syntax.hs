@@ -7,8 +7,10 @@ data Name a = Name { nameName :: a, nameUniqueId :: Int }
 
 data Var f b = Free (Name f)
              | Bound Int b
+             deriving (Eq, Ord, Show)
 
 data Scope p t = Scope p t
+               deriving (Eq, Ord, Show)
 
 newtype Ignore a = Ignore a
               deriving (Show)
@@ -28,6 +30,7 @@ type TermScope = Scope (Ignore TermName) Term
 
 data Const = ConstI Int
            | ConstB Bool
+           deriving (Eq, Ord, Show)
 
 data Term = Term :@ Term -- application
           | Abs Ty TermScope -- lambda-abstraction
@@ -35,6 +38,7 @@ data Term = Term :@ Term -- application
           | Const Const -- constants
           | Plus Term Term -- addition
           | IfThenElse Term Term Term -- if-then-else conditional
+          deriving (Eq, Ord, Show)
 
 data Ty = Ty :-> Ty
         | Int
