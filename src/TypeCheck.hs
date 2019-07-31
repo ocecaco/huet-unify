@@ -1,6 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-module TypeCheck (doInferType, TC(..), run, inferType, withContext, withContextTelescope) where
+module TypeCheck (doInferType, TC(..), run, inferType) where
 
 import Syntax
 import Data.Text (Text)
@@ -12,12 +12,11 @@ import Control.Monad.Reader
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 
-newtype TCContext = TCContext (Map TermName Ty)
 newtype TCState = TCState { _varCount :: Int }
 
 type TypeError = Text
 
-newtype TC a = TC { runTC :: ReaderT TCContext (StateT TCState (ExceptT TypeError Identity)) a }
+newtype TC a = TC { runTC :: StateT TCState (ExceptT TypeError Identity) a }
              deriving (Functor, Applicative, Monad)
 
 instance MonadFresh TC where
@@ -28,19 +27,6 @@ instance MonadFresh TC where
 
 typeError :: Text -> TC a
 typeError msg = TC (throwError msg)
-
-withContext :: TermName -> Ty -> TC a -> TC a
-withContext name ty (TC act) = TC $ local (\(TCContext ctxt) -> TCContext (M.insert name ty ctxt)) act
-
-withContextTelescope :: [(TermName, Ty)] -> TC a -> TC a
-withContextTelescope binders act = foldr (uncurry withContext) act binders
-
-lookupType :: TermName -> TC Ty
-lookupType name = TC $ do
-  TCContext ctxt <- ask
-  case M.lookup name ctxt of
-    Just ty -> return ty
-    Nothing -> error "name lookup failed"
 
 checkEqual :: Ty -> Ty -> TC ()
 checkEqual ty1 ty2
@@ -53,12 +39,13 @@ inferType (Const (ConstB _)) = return Bool
 inferType (Const Plus) = return (Int :-> Int :-> Int)
 inferType (Const (IfThenElse ty)) = return (Bool :-> ty :-> ty :-> ty)
 
-inferType (Var (Free name)) = lookupType name
+inferType (Var (Free name)) = return $ snd (nameName name)
 inferType (Var (Bound _ _)) = error "type checker encountered bound variable"
 
-inferType (Abs ty scope) = do
+inferType (Abs scope) = do
   (x, body) <- unbindTerm scope
-  resty <- withContext x ty (inferType body)
+  let ty = snd (nameName x)
+  resty <- inferType body
   return (ty --> resty)
 
 inferType (fun :@ arg) = do
@@ -71,11 +58,8 @@ inferType (fun :@ arg) = do
     _ -> typeError $ "expected function type, got " <> T.pack (show funty)
 
 run :: TC a -> Either TypeError a
-run act = runIdentity (runExceptT (evalStateT (runReaderT (runTC act) initialContext) initialState))
-  where initialContext :: TCContext
-        initialContext = TCContext M.empty
-
-        initialState :: TCState
+run act = runIdentity (runExceptT (evalStateT (runTC act) initialState))
+  where initialState :: TCState
         initialState = TCState 0
 
 doInferType :: Term -> Either TypeError Ty

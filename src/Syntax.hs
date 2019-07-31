@@ -27,9 +27,9 @@ class Monad m => MonadFresh m where
 freshFromRawName :: MonadFresh m => f -> m (Name f)
 freshFromRawName raw = fresh (Name raw 0)
 
-type TermName = Name Text
-type TermVar = Var Text ()
-type TermScope = Scope (Ignore TermName) Term
+type TermName = Name (Text, Ty)
+type TermVar = Var (Text, Ty) ()
+type TermScope = Scope (Ignore Text, Ty) Term
 
 data Const = ConstI Int
            | ConstB Bool
@@ -38,7 +38,7 @@ data Const = ConstI Int
            deriving (Eq, Ord, Show)
 
 data Term = Term :@ Term -- application
-          | Abs Ty TermScope -- lambda-abstraction
+          | Abs TermScope -- lambda-abstraction
           | Var TermVar -- free/bound variable
           | Const Const -- constants
           deriving (Eq, Ord, Show)
@@ -52,7 +52,7 @@ infixr :->
 infixl :@
 
 bindTerm :: TermName -> Term -> TermScope
-bindTerm bindname bindterm = Scope (Ignore bindname) (go 0 bindterm)
+bindTerm bindname bindterm = Scope (Ignore . fst . nameName $ bindname, snd . nameName $ bindname) (go 0 bindterm)
   where go :: Int -> Term -> Term
         go _ tm@(Const _) = tm
         go k tm@(Var (Free occurname))
@@ -60,7 +60,7 @@ bindTerm bindname bindterm = Scope (Ignore bindname) (go 0 bindterm)
           | otherwise = tm
         go _ tm@(Var (Bound _ _)) = tm
         go k (t1 :@ t2) = go k t1 :@ go k t2
-        go k (Abs ty scope) = Abs ty (goScope k scope)
+        go k (Abs scope) = Abs (goScope k scope)
 
         goScope :: Int -> TermScope -> TermScope
         goScope k (Scope name inner) = Scope name (go (k + 1) inner)
@@ -74,14 +74,14 @@ openTerm (Scope _ body) sub = go 0 body
           | k == j = sub
           | otherwise = tm
         go k (t1 :@ t2) = go k t1 :@ go k t2
-        go k (Abs ty scope) = Abs ty (goScope k scope)
+        go k (Abs scope) = Abs (goScope k scope)
 
         goScope :: Int -> TermScope -> TermScope
         goScope k (Scope name inner) = Scope name (go (k + 1) inner)
 
 unbindTerm :: MonadFresh m => TermScope -> m (TermName, Term)
-unbindTerm scope@(Scope (Ignore origname) _) = do
-  freshname <- fresh origname
+unbindTerm scope@(Scope (Ignore origname, ty) _) = do
+  freshname <- freshFromRawName (origname, ty)
   return (freshname, openTerm scope (Var (Free freshname)))
 
 substTerm :: TermName -> Term -> Term -> Term
@@ -94,20 +94,20 @@ substTerm subname sub = go
 
         go tm@(Var (Bound _ _)) = tm
         go (t1 :@ t2) = go t1 :@ go t2
-        go (Abs ty scope) = Abs ty (goScope scope)
-
+        go (Abs scope) = Abs (goScope scope)
 
         goScope :: TermScope -> TermScope
         goScope (Scope name inner) = Scope name (go inner)
 
-lam :: Text -> Ty -> Term -> Term
-lam name ty body = Abs ty (bindTerm (Name name 0) body)
+lam :: Text -> Ty -> (Term -> Term) -> Term
+lam name ty body = Abs bodyScope
+  where typedName = Name (name, ty) 0
+        typedVar = Var (Free typedName)
+        bodyWithVar = body typedVar
+        bodyScope = bindTerm typedName bodyWithVar
 
 (@@) :: Term -> Term -> Term
 t1 @@ t2 = t1 :@ t2
-
-v :: Text -> Term
-v name = Var (Free (Name name 0))
 
 i :: Int -> Term
 i nv = Const (ConstI nv)
