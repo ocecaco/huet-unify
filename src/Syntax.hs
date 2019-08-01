@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module Syntax where
 
 import Data.Text (Text)
@@ -86,8 +87,8 @@ openTerm (Scope _ body) sub = go 0 body
         goScope k (Scope name inner) = Scope name (go (k + 1) inner)
 
 unbindTerm :: MonadFresh m => TermScope -> m (TermName, Term)
-unbindTerm scope@(Scope (Ignore origname, ty) _) = do
-  freshname <- freshFromRawName (origname, ty)
+unbindTerm scope = do
+  freshname <- scopeName scope
   return (freshname, openTerm scope (Var (Free freshname)))
 
 substTerm :: Term -> Term -> Term -> Term
