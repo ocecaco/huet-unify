@@ -8,15 +8,13 @@ import qualified Data.Text as T
 import Control.Monad.Identity
 import Control.Monad.Except
 import Control.Monad.State.Strict
-import Control.Monad.Reader
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as M
+import Control.Monad.Logic
 
 newtype TCState = TCState { _varCount :: Int }
 
 type TypeError = Text
 
-newtype TC a = TC { runTC :: StateT TCState (ExceptT TypeError Identity) a }
+newtype TC a = TC { runTC :: LogicT (StateT TCState (ExceptT TypeError Identity)) a }
              deriving (Functor, Applicative, Monad)
 
 instance MonadFresh TC where
@@ -59,7 +57,7 @@ inferType (fun :@ arg) = do
     _ -> typeError $ "expected function type, got " <> T.pack (show funty)
 
 run :: TC a -> Either TypeError a
-run act = runIdentity (runExceptT (evalStateT (runTC act) initialState))
+run act = runIdentity (runExceptT (evalStateT (observeT (runTC act)) initialState))
   where initialState :: TCState
         initialState = TCState 0
 
