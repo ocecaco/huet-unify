@@ -53,7 +53,7 @@ infixr :->
 infixl :@
 
 bindTerm :: TermName -> Term -> TermScope
-bindTerm bindname bindterm = ManualScope (Ignore . fst . nameName $ bindname, snd . nameName $ bindname) (go 0 bindterm)
+bindTerm bindname bindterm = ManualScope (Ignore prettyname, bindty) (go 0 bindterm)
   where go :: Int -> Term -> Term
         go _ tm@(Const _) = tm
         go _ tm@(Meta _) = tm
@@ -66,6 +66,8 @@ bindTerm bindname bindterm = ManualScope (Ignore . fst . nameName $ bindname, sn
 
         goScope :: Int -> TermScope -> TermScope
         goScope k (ManualScope name inner) = ManualScope name (go (k + 1) inner)
+
+        (prettyname, bindty) = nameInfo bindname
 
 openTerm :: TermScope -> Term -> Term
 openTerm (ManualScope _ body) sub = go 0 body
@@ -110,7 +112,7 @@ substVar :: TermName -> Term -> Term -> Term
 substVar varName = substTerm (Var (Free varName))
 
 scopeName :: MonadFresh m => TermScope -> m TermName
-scopeName (ManualScope (Ignore name, ty) _) = freshFromRawName (name, ty)
+scopeName (ManualScope (Ignore name, ty) _) = freshFromNameInfo (name, ty)
 
 collectArgTypes :: Ty -> [Ty]
 collectArgTypes (ty1 :-> ty2) = ty1 : collectArgTypes ty2

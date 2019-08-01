@@ -38,7 +38,7 @@ etaExpand tm = do
   let (hd, args) = collectSpine body
 
   let missingBinderTypes = drop (length binders) argTypes
-  missingBinderNames <- mapM (\bindty -> freshFromRawName ("eta", bindty)) missingBinderTypes
+  missingBinderNames <- mapM (\bindty -> freshFromNameInfo ("eta", bindty)) missingBinderTypes
   let missingBinderVars = map (Var . Free) missingBinderNames
 
   argsExpanded <- mapM etaExpand (args ++ missingBinderVars)

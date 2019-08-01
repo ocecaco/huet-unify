@@ -23,10 +23,10 @@ newtype TC a = TC { runTC :: LogicT (StateT TCState (ExceptT TypeError Identity)
              deriving (Functor, Applicative, Monad, Alternative, MonadPlus, MonadLogic)
 
 instance MonadFresh TC where
-  fresh (Name name _id) = TC $ do
+  fresh name = TC $ do
     TCState count <- get
     put (TCState (count + 1))
-    return (Name name count)
+    return (manualName (nameInfo name) count)
 
 typeError :: Text -> TC a
 typeError msg = TC (throwError msg)

@@ -16,18 +16,18 @@ checkEqual ty1 ty2
   | otherwise = typeError "type mismatch"
 
 inferType :: Term -> TC Ty
-inferType (Meta (MetaVar (Name ty _))) = return ty
+inferType (Meta (MetaVar name)) = return (nameInfo name)
 inferType (Const (ConstI _)) = return Int
 inferType (Const (ConstB _)) = return Bool
 inferType (Const Plus) = return (Int :-> Int :-> Int)
 inferType (Const (IfThenElse ty)) = return (Bool :-> ty :-> ty :-> ty)
 
-inferType (Var (Free name)) = return $ snd (nameName name)
+inferType (Var (Free name)) = return $ snd (nameInfo name)
 inferType (Var (Bound _ _)) = error "type checker encountered bound variable"
 
 inferType (Abs scope) = do
   (x, body) <- unbindTerm scope
-  let ty = snd (nameName x)
+  let ty = snd (nameInfo x)
   resty <- inferType body
   return (ty --> resty)
 

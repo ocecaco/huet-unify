@@ -1,15 +1,23 @@
 module Name
-  ( Name(..)
+  ( Name
+  , nameInfo
+  , manualName
   , Var(..)
   , Scope(..)
   , Ignore(..)
   , MonadFresh(..)
-  , freshFromRawName
+  , freshFromNameInfo
   )
 where
 
-data Name a = Name { nameName :: a, nameUniqueId :: Int }
+data Name a = Name a Int
             deriving (Eq, Ord, Show)
+
+nameInfo :: Name a -> a
+nameInfo (Name raw _) = raw
+
+manualName :: a -> Int -> Name a
+manualName = Name
 
 data Var f b = Free (Name f)
              | Bound Int b
@@ -30,5 +38,5 @@ instance Ord (Ignore a) where
 class Monad m => MonadFresh m where
   fresh :: Name f -> m (Name f)
 
-freshFromRawName :: MonadFresh m => f -> m (Name f)
-freshFromRawName raw = fresh (Name raw 0)
+freshFromNameInfo :: MonadFresh m => f -> m (Name f)
+freshFromNameInfo raw = fresh (Name raw 0)

@@ -18,7 +18,7 @@ import Name
 
 lam :: Text -> Ty -> (Term -> Term) -> Term
 lam name ty body = Abs bodyScope
-  where typedName = Name (name, ty) 0
+  where typedName = manualName (name, ty) 0
         typedVar = Var (Free typedName)
         bodyWithVar = body typedVar
         bodyScope = bindTerm typedName bodyWithVar
@@ -27,7 +27,7 @@ lam name ty body = Abs bodyScope
 t1 @@ t2 = t1 :@ t2
 
 meta :: Int -> Ty -> Term
-meta n ty = Meta (MetaVar (Name ty n))
+meta n ty = Meta (MetaVar (manualName ty n))
 
 i :: Int -> Term
 i nv = Const (ConstI nv)
