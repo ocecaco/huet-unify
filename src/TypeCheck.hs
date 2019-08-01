@@ -34,6 +34,7 @@ checkEqual ty1 ty2
   | otherwise = typeError "type mismatch"
 
 inferType :: Term -> TC Ty
+inferType (Meta (MetaVar _ ty)) = return ty
 inferType (Const (ConstI _)) = return Int
 inferType (Const (ConstB _)) = return Bool
 inferType (Const Plus) = return (Int :-> Int :-> Int)

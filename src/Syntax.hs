@@ -112,6 +112,9 @@ substMeta metaId = substTerm (Meta metaId)
 substVar :: TermName -> Term -> Term -> Term
 substVar varName = substTerm (Var (Free varName))
 
+scopeName :: MonadFresh m => TermScope -> m TermName
+scopeName (Scope (Ignore name, ty) _) = freshFromRawName (name, ty)
+
 lam :: Text -> Ty -> (Term -> Term) -> Term
 lam name ty body = Abs bodyScope
   where typedName = Name (name, ty) 0
