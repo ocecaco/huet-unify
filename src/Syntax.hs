@@ -1,39 +1,34 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-module Syntax where
+module Syntax
+  ( Term(..)
+  , Ty(..)
+  , Const(..)
+  , MetaVar(..)
+  , TermName
+  , TermVar
+  , TermScope
+  , bindTerm
+  , openTerm
+  , unbindTerm
+  , substTerm
+  , substMeta
+  , substVar
+  , scopeName
+  , collectArgTypes
+  , collectLambdas
+  , collectSpine
+  , createSpine
+  )
+where
 
 import Data.Text (Text)
 import Data.List (foldl')
-
-data Name a = Name { nameName :: a, nameUniqueId :: Int }
-            deriving (Eq, Ord, Show)
-
-data Var f b = Free (Name f)
-             | Bound Int b
-             deriving (Eq, Ord, Show)
-
-data Scope p t = Scope p t
-               deriving (Eq, Ord, Show)
-
-newtype Ignore a = Ignore a
-              deriving (Show)
-
-instance Eq (Ignore a) where
-  _ == _ = True
-
-instance Ord (Ignore a) where
-  _ `compare` _ = EQ
-
-class Monad m => MonadFresh m where
-  fresh :: Name f -> m (Name f)
-
-freshFromRawName :: MonadFresh m => f -> m (Name f)
-freshFromRawName raw = fresh (Name raw 0)
+import Name
 
 type TermName = Name (Text, Ty)
 type TermVar = Var (Text, Ty) ()
 type TermScope = Scope (Ignore Text, Ty) Term
 
-data MetaVar = MetaVar Int Ty
+data MetaVar = MetaVar (Name Ty)
              deriving (Eq, Ord, Show)
 
 data Const = ConstI Int
@@ -58,7 +53,7 @@ infixr :->
 infixl :@
 
 bindTerm :: TermName -> Term -> TermScope
-bindTerm bindname bindterm = Scope (Ignore . fst . nameName $ bindname, snd . nameName $ bindname) (go 0 bindterm)
+bindTerm bindname bindterm = ManualScope (Ignore . fst . nameName $ bindname, snd . nameName $ bindname) (go 0 bindterm)
   where go :: Int -> Term -> Term
         go _ tm@(Const _) = tm
         go _ tm@(Meta _) = tm
@@ -70,10 +65,10 @@ bindTerm bindname bindterm = Scope (Ignore . fst . nameName $ bindname, snd . na
         go k (Abs scope) = Abs (goScope k scope)
 
         goScope :: Int -> TermScope -> TermScope
-        goScope k (Scope name inner) = Scope name (go (k + 1) inner)
+        goScope k (ManualScope name inner) = ManualScope name (go (k + 1) inner)
 
 openTerm :: TermScope -> Term -> Term
-openTerm (Scope _ body) sub = go 0 body
+openTerm (ManualScope _ body) sub = go 0 body
   where go :: Int -> Term -> Term
         go _ tm@(Const _) = tm
         go _ tm@(Meta _) = tm
@@ -85,7 +80,7 @@ openTerm (Scope _ body) sub = go 0 body
         go k (Abs scope) = Abs (goScope k scope)
 
         goScope :: Int -> TermScope -> TermScope
-        goScope k (Scope name inner) = Scope name (go (k + 1) inner)
+        goScope k (ManualScope name inner) = ManualScope name (go (k + 1) inner)
 
 unbindTerm :: MonadFresh m => TermScope -> m (TermName, Term)
 unbindTerm scope = do
@@ -106,7 +101,7 @@ substTerm source target = go
         go (Abs scope) = Abs (goScope scope)
 
         goScope :: TermScope -> TermScope
-        goScope (Scope name inner) = Scope name (go inner)
+        goScope (ManualScope name inner) = ManualScope name (go inner)
 
 substMeta :: MetaVar -> Term -> Term -> Term
 substMeta metaId = substTerm (Meta metaId)
@@ -115,7 +110,7 @@ substVar :: TermName -> Term -> Term -> Term
 substVar varName = substTerm (Var (Free varName))
 
 scopeName :: MonadFresh m => TermScope -> m TermName
-scopeName (Scope (Ignore name, ty) _) = freshFromRawName (name, ty)
+scopeName (ManualScope (Ignore name, ty) _) = freshFromRawName (name, ty)
 
 collectArgTypes :: Ty -> [Ty]
 collectArgTypes (ty1 :-> ty2) = ty1 : collectArgTypes ty2
@@ -138,40 +133,3 @@ collectSpine t = go t []
 
 createSpine :: Term -> [Term] -> Term
 createSpine = foldl' (:@)
-
-lam :: Text -> Ty -> (Term -> Term) -> Term
-lam name ty body = Abs bodyScope
-  where typedName = Name (name, ty) 0
-        typedVar = Var (Free typedName)
-        bodyWithVar = body typedVar
-        bodyScope = bindTerm typedName bodyWithVar
-
-(@@) :: Term -> Term -> Term
-t1 @@ t2 = t1 :@ t2
-
-meta :: Int -> Ty -> Term
-meta n ty = Meta (MetaVar n ty)
-
-i :: Int -> Term
-i nv = Const (ConstI nv)
-
-b :: Bool -> Term
-b bv = Const (ConstB bv)
-
-ifthenelse :: Ty -> Term -> Term -> Term -> Term
-ifthenelse ty cond t1 t2 = Const (IfThenElse ty) @@ cond @@ t1 @@ t2
-
-(+.) :: Term -> Term -> Term
-t1 +. t2 = Const Plus @@ t1 @@ t2
-
-int :: Ty
-int = Int
-
-bool :: Ty
-bool = Bool
-
-(-->) :: Ty -> Ty -> Ty
-ty1 --> ty2 = ty1 :-> ty2
-
-infixl @@
-infixr -->

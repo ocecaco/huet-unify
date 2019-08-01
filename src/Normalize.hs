@@ -1,9 +1,10 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Normalize (doNormalizeTerm, doNormalizeTermWithEta) where
+module Normalize (normalizeTerm, etaExpand) where
 
 import Syntax
 import TypeCheck
+import Name
+import TCMonad
 
 normalizeTerm :: Term -> TC Term
 normalizeTerm c@(Const _) = return c
@@ -47,13 +48,3 @@ etaExpand tm = do
         where addBinder bindname inner = Abs (bindTerm bindname inner)
 
   return expanded
-
-doNormalizeTerm :: Term -> Term
-doNormalizeTerm tm = case run (normalizeTerm tm) of
-  Left _ -> error "unexpected type error while normalizing"
-  Right t -> t
-
-doNormalizeTermWithEta :: Term -> Term
-doNormalizeTermWithEta tm = case run (normalizeTerm tm >>= etaExpand) of
-  Left _ -> error "unexpected type error while normalizing"
-  Right t -> t

@@ -1,31 +1,14 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-module TypeCheck (doInferType, TC(..), run, inferType) where
+module TypeCheck
+  ( inferType
+  )
+where
 
 import Syntax
-import Data.Text (Text)
+import SyntaxHelper
+import TCMonad (TC, typeError)
+import Name
 import qualified Data.Text as T
-import Control.Monad.Identity
-import Control.Monad.Except
-import Control.Monad.State.Strict
-import Control.Monad.Logic
-import Control.Applicative (Alternative)
-
-newtype TCState = TCState { _varCount :: Int }
-
-type TypeError = Text
-
-newtype TC a = TC { runTC :: LogicT (StateT TCState (ExceptT TypeError Identity)) a }
-             deriving (Functor, Applicative, Monad, Alternative, MonadPlus, MonadLogic)
-
-instance MonadFresh TC where
-  fresh (Name name _id) = TC $ do
-    TCState count <- get
-    put (TCState (count + 1))
-    return (Name name count)
-
-typeError :: Text -> TC a
-typeError msg = TC (throwError msg)
 
 checkEqual :: Ty -> Ty -> TC ()
 checkEqual ty1 ty2
@@ -33,7 +16,7 @@ checkEqual ty1 ty2
   | otherwise = typeError "type mismatch"
 
 inferType :: Term -> TC Ty
-inferType (Meta (MetaVar _ ty)) = return ty
+inferType (Meta (MetaVar (Name ty _))) = return ty
 inferType (Const (ConstI _)) = return Int
 inferType (Const (ConstB _)) = return Bool
 inferType (Const Plus) = return (Int :-> Int :-> Int)
@@ -56,11 +39,3 @@ inferType (fun :@ arg) = do
       checkEqual argty actualty
       return resultty
     _ -> typeError $ "expected function type, got " <> T.pack (show funty)
-
-run :: TC a -> Either TypeError a
-run act = runIdentity (runExceptT (evalStateT (observeT (runTC act)) initialState))
-  where initialState :: TCState
-        initialState = TCState 0
-
-doInferType :: Term -> Either TypeError Ty
-doInferType tm = run (inferType tm)

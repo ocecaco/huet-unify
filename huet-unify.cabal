@@ -19,9 +19,12 @@ extra-source-files:  CHANGELOG.md
 
 library
   exposed-modules:     Syntax
+                     , SyntaxHelper
                      , TypeCheck
                      , Normalize
                      , Unify
+                     , Name
+                     , TCMonad
   -- other-modules:
   -- other-extensions:
   build-depends:       base
@@ -31,7 +34,7 @@ library
                      , logict
   hs-source-dirs:      src
   default-language:    Haskell2010
-  ghc-options:         -Wall
+  ghc-options:         -Wall -Wmissing-export-lists
 
 executable huet-unify
   main-is:             Main.hs
@@ -40,4 +43,4 @@ executable huet-unify
   build-depends:       base
   hs-source-dirs:      src
   default-language:    Haskell2010
-  ghc-options:         -Wall
+  ghc-options:         -Wall -Wmissing-export-lists
