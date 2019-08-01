@@ -8,6 +8,7 @@ import Data.List
 
 normalizeTerm :: Term -> TC Term
 normalizeTerm c@(Const _) = return c
+normalizeTerm m@(Meta _) = return m
 normalizeTerm tm@(Var (Free _)) = return tm
 
 normalizeTerm (Var (Bound _ _)) = error "normalization encountered bound variable"

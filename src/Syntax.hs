@@ -31,6 +31,9 @@ type TermName = Name (Text, Ty)
 type TermVar = Var (Text, Ty) ()
 type TermScope = Scope (Ignore Text, Ty) Term
 
+data MetaVar = MetaVar Int Ty
+             deriving (Eq, Ord, Show)
+
 data Const = ConstI Int
            | ConstB Bool
            | Plus
@@ -41,6 +44,7 @@ data Term = Term :@ Term -- application
           | Abs TermScope -- lambda-abstraction
           | Var TermVar -- free/bound variable
           | Const Const -- constants
+          | Meta MetaVar -- metavariables
           deriving (Eq, Ord, Show)
 
 data Ty = Ty :-> Ty
@@ -55,6 +59,7 @@ bindTerm :: TermName -> Term -> TermScope
 bindTerm bindname bindterm = Scope (Ignore . fst . nameName $ bindname, snd . nameName $ bindname) (go 0 bindterm)
   where go :: Int -> Term -> Term
         go _ tm@(Const _) = tm
+        go _ tm@(Meta _) = tm
         go k tm@(Var (Free occurname))
           | bindname == occurname = Var (Bound k ())
           | otherwise = tm
@@ -69,6 +74,7 @@ openTerm :: TermScope -> Term -> Term
 openTerm (Scope _ body) sub = go 0 body
   where go :: Int -> Term -> Term
         go _ tm@(Const _) = tm
+        go _ tm@(Meta _) = tm
         go _ tm@(Var (Free _)) = tm
         go k tm@(Var (Bound j ()))
           | k == j = sub
@@ -84,20 +90,27 @@ unbindTerm scope@(Scope (Ignore origname, ty) _) = do
   freshname <- freshFromRawName (origname, ty)
   return (freshname, openTerm scope (Var (Free freshname)))
 
-substTerm :: TermName -> Term -> Term -> Term
-substTerm subname sub = go
+substTerm :: Term -> Term -> Term -> Term
+substTerm source target = go
   where go :: Term -> Term
-        go tm@(Const _) = tm
-        go tm@(Var (Free occurname))
-          | subname == occurname = sub
-          | otherwise = tm
+        go tm
+          | tm == source = target
 
-        go tm@(Var (Bound _ _)) = tm
+        go tm@(Const _) = tm
+        go tm@(Meta _) = tm
+        go tm@(Var _) = tm
+
         go (t1 :@ t2) = go t1 :@ go t2
         go (Abs scope) = Abs (goScope scope)
 
         goScope :: TermScope -> TermScope
         goScope (Scope name inner) = Scope name (go inner)
+
+substMeta :: MetaVar -> Term -> Term -> Term
+substMeta metaId = substTerm (Meta metaId)
+
+substVar :: TermName -> Term -> Term -> Term
+substVar varName = substTerm (Var (Free varName))
 
 lam :: Text -> Ty -> (Term -> Term) -> Term
 lam name ty body = Abs bodyScope
