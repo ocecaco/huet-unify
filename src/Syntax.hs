@@ -2,6 +2,7 @@
 module Syntax where
 
 import Data.Text (Text)
+import Data.List (foldl')
 
 data Name a = Name { nameName :: a, nameUniqueId :: Int }
             deriving (Eq, Ord, Show)
@@ -116,6 +117,28 @@ substVar varName = substTerm (Var (Free varName))
 scopeName :: MonadFresh m => TermScope -> m TermName
 scopeName (Scope (Ignore name, ty) _) = freshFromRawName (name, ty)
 
+collectArgTypes :: Ty -> [Ty]
+collectArgTypes (ty1 :-> ty2) = ty1 : collectArgTypes ty2
+collectArgTypes _ = []
+
+type Binders = [TermName]
+type Spine = (Term, [Term])
+
+collectLambdas :: MonadFresh m => Term -> m (Binders, Term)
+collectLambdas (Abs scope) = do
+  (x, body) <- unbindTerm scope
+  (rest, inner) <- collectLambdas body
+  return (x:rest, inner)
+collectLambdas tm = return ([], tm)
+
+collectSpine :: Term -> Spine
+collectSpine t = go t []
+  where go (f :@ arg) acc = go f (arg:acc)
+        go f acc = (f, acc)
+
+createSpine :: Term -> [Term] -> Term
+createSpine = foldl' (:@)
+
 lam :: Text -> Ty -> (Term -> Term) -> Term
 lam name ty body = Abs bodyScope
   where typedName = Name (name, ty) 0
@@ -125,6 +148,9 @@ lam name ty body = Abs bodyScope
 
 (@@) :: Term -> Term -> Term
 t1 @@ t2 = t1 :@ t2
+
+meta :: Int -> Ty -> Term
+meta n ty = Meta (MetaVar n ty)
 
 i :: Int -> Term
 i nv = Const (ConstI nv)

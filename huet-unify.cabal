@@ -21,6 +21,7 @@ library
   exposed-modules:     Syntax
                      , TypeCheck
                      , Normalize
+                     , Unify
   -- other-modules:
   -- other-extensions:
   build-depends:       base

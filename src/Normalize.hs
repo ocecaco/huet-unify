@@ -4,7 +4,6 @@ module Normalize (doNormalizeTerm, doNormalizeTermWithEta) where
 
 import Syntax
 import TypeCheck
-import Data.List
 
 normalizeTerm :: Term -> TC Term
 normalizeTerm c@(Const _) = return c
@@ -34,7 +33,8 @@ etaExpand :: Term -> TC Term
 etaExpand tm = do
   ty <- inferType tm
   let argTypes = collectArgTypes ty
-  (binders, (hd, args)) <- collectLambdas tm
+  (binders, body) <- collectLambdas tm
+  let (hd, args) = collectSpine body
 
   let missingBinderTypes = drop (length binders) argTypes
   missingBinderNames <- mapM (\bindty -> freshFromRawName ("eta", bindty)) missingBinderTypes
@@ -47,28 +47,6 @@ etaExpand tm = do
         where addBinder bindname inner = Abs (bindTerm bindname inner)
 
   return expanded
-
-collectArgTypes :: Ty -> [Ty]
-collectArgTypes (ty1 :-> ty2) = ty1 : collectArgTypes ty2
-collectArgTypes _ = []
-
-type Binders = [TermName]
-type Spine = (Term, [Term])
-
-collectLambdas :: Term -> TC (Binders, Spine)
-collectLambdas (Abs scope) = do
-  (x, body) <- unbindTerm scope
-  (rest, inner) <- collectLambdas body
-  return (x:rest, inner)
-collectLambdas tm = return ([], collectSpine tm)
-
-collectSpine :: Term -> (Term, [Term])
-collectSpine t = go t []
-  where go (f :@ arg) acc = go f (arg:acc)
-        go f acc = (f, acc)
-
-createSpine :: Term -> [Term] -> Term
-createSpine = foldl' (:@)
 
 doNormalizeTerm :: Term -> Term
 doNormalizeTerm tm = case run (normalizeTerm tm) of

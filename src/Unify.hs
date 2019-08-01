@@ -2,6 +2,8 @@ module Unify where
 
 import Syntax
 import TypeCheck
+import Control.Monad
+import Debug.Trace
 
 type Equation = (Term, Term)
 
@@ -13,31 +15,36 @@ typeCheckEquations :: [Equation] -> TC ()
 typeCheckEquations = undefined
 
 failure :: TC a
-failure = undefined
+failure = mzero
 
-simplify :: Equations -> TC Equations
-simplify ((t1, t2):rest) = do
+decomposeRigidRigid :: Equations -> TC Equations
+decomposeRigidRigid ((t1, t2):rest) = do
   expanded <- rigidRigid t1 t2
   case expanded of
-    Just eqs -> simplify (eqs ++ rest)
+    Just eqs -> decomposeRigidRigid (eqs ++ rest)
     Nothing -> do
-      srest <- simplify rest
+      srest <- decomposeRigidRigid rest
       return ((t1, t2):srest)
   where rigidRigid :: Term -> Term -> TC (Maybe Equations)
-        rigidRigid (left1 :@ left2) (right1 :@ right2) = return . Just $ [(left1, right1), (left2, right2)]
+        rigidRigid tm1 tm2
+          | (hd1, spine1) <- collectSpine tm1
+          , isAtom hd1
+          , (hd2, spine2) <- collectSpine tm2
+          , isAtom hd2 = do
+              guard $ hd1 == hd2 && length spine1 == length spine2
+              return $ Just (zip spine1 spine2)
+
         rigidRigid (Abs scope1) (Abs scope2) = do
           -- use the same variable to open both scopes
           name <- scopeName scope1
           let var = Var (Free name)
           return . Just $ [(openTerm scope1 var, openTerm scope2 var)]
-        rigidRigid (Var (Bound _ _)) _ = error "unification encountered bound variables"
-        rigidRigid _ (Var (Bound _ _)) = error "unification encountered bound variables"
-        rigidRigid (Var (Free name1)) (Var (Free name2))
-          | name1 == name2 = return . Just $ []
-          | otherwise = failure
-        rigidRigid (Const c1) (Const c2)
-          | c1 == c2 = return . Just $ []
-          | otherwise = failure
+
         rigidRigid _ _ = return Nothing
 
-simplify [] = return []
+        isAtom (Var (Free _)) = True
+        isAtom (Const _) = True
+        isAtom (Var (Bound _ _)) = error "unification encountered bound variable"
+        isAtom _ = False
+
+decomposeRigidRigid [] = return []

@@ -9,13 +9,14 @@ import Control.Monad.Identity
 import Control.Monad.Except
 import Control.Monad.State.Strict
 import Control.Monad.Logic
+import Control.Applicative (Alternative)
 
 newtype TCState = TCState { _varCount :: Int }
 
 type TypeError = Text
 
 newtype TC a = TC { runTC :: LogicT (StateT TCState (ExceptT TypeError Identity)) a }
-             deriving (Functor, Applicative, Monad)
+             deriving (Functor, Applicative, Monad, Alternative, MonadPlus, MonadLogic)
 
 instance MonadFresh TC where
   fresh (Name name _id) = TC $ do
