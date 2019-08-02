@@ -49,7 +49,10 @@ data Atom = AtomC Const -- constant
           deriving (Eq, Ord, Show)
 
 data Flex = Flex MetaVar [Term]
+          deriving (Eq, Ord, Show)
+
 data Rigid = Rigid Atom [Term]
+           deriving (Eq, Ord, Show)
 
 data ClassifiedTerm = TermFlex Flex
                     | TermRigid Rigid
@@ -75,42 +78,36 @@ classifyEquation (t1, t2) = case (classifyTerm t1, classifyTerm t2) of
   (TermRigid r, TermFlex f) -> EqFlexRigid f r
   (TermFlex f1, TermFlex f2) -> EqFlexFlex f1 f2
 
-tryAtom :: [TermName] -> Term -> TC Term
-tryAtom argNames chosenAtom = do
-  let argTys = map (snd . nameInfo) argNames
+getSubstitutions :: MetaVar -> [Ty] -> Atom -> TC Term
+getSubstitutions mv argsTys hd = do
+  argNames <- mapM (\ty -> freshFromNameInfo ("x", ty)) argsTys
   let argVars = map (Var . Free) argNames
+  -- we can only apply imitation when the rigid head is a constant
+  -- (and not a free variable)
+  let imitateVar = case hd of
+        AtomC c -> [Const c]
+        _ -> []
+  let possibleAtoms = argVars ++ imitateVar
+
+  -- CAREFUL: non-deterministic choice happens here
+  chosenAtom <- msum (map return possibleAtoms)
+
+  -- result type of the chosen atom should match the expected result
+  -- type of the metavariable
   atomType <- inferType chosenAtom
-  let atomArgTypes = argTypes atomType
+  resty <- resultType <$> inferType (Meta mv)
+  guard (resultType atomType == resty)
 
   -- create fresh meta variables of the proper type for the arguments
   -- of the chosen atom
-  metaNames <- mapM freshFromNameInfo [ createArrowType argTys atomArgty | atomArgty <- atomArgTypes ]
+  let atomArgTypes = argTypes atomType
+  metaNames <- mapM freshFromNameInfo [ createArrowType argsTys atomArgty | atomArgty <- atomArgTypes ]
   let metaHeads = map (Meta . MetaVar) metaNames
   let appliedMetas = map (\metahd -> createSpine metahd argVars) metaHeads
 
   let appliedAtom = createLambdas argNames $ createSpine chosenAtom appliedMetas
 
   return appliedAtom
-
-getSubstitutions :: MetaVar -> [Term] -> Atom -> TC [TC Term]
-getSubstitutions mv args1 hd = do
-  args1types <- mapM inferType args1
-  args1names <- mapM (\ty -> freshFromNameInfo ("x", ty)) args1types
-
-  -- we can only project onto those variables whose result type
-  -- matches the expected result type of the metavariable
-  resty <- resultType <$> inferType (Meta mv)
-  let projVars = map (Var . Free) $ filter (\v -> resultType (snd (nameInfo v)) == resty) args1names
-
-  -- we can only apply imitation when the rigid head is a constant
-  -- (and not a free variable)
-  let imitateVar = case hd of
-        AtomC c -> [Const c]
-        _ -> []
-
-  -- this is where a non-deterministic choice happens. hence this is subject to backtracking.
-  let possibleAtoms = projVars ++ imitateVar
-  return (map (tryAtom args1names) possibleAtoms)
 
 type Substitution = [(MetaVar, Term)]
 
@@ -132,12 +129,8 @@ match eqs = do
   case flexrigid of
     [] -> return (Done flexflex)
     ((Flex m args1, Rigid a _):_) -> do
-      subs <- getSubstitutions m args1 a
-
-      -- non-deterministic choice, backtracking can occur to try
-      -- different options
-      s <- msum subs
-
+      args1types <- mapM inferType args1
+      s <- getSubstitutions m args1types a
       return (Continue (m, s) (applySubst m s simplified))
 
 applySubst :: MetaVar -> Term -> Equations -> Equations
