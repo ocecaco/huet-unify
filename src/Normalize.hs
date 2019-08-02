@@ -18,9 +18,6 @@ normalize (t1 :@ t2) = do
   normt2 <- normalize t2
   case normt1 :@ normt2 of
     Abs scope :@ arg -> normalize (openTerm scope arg)
-    Const Plus :@ Const (ConstI n1) :@ Const (ConstI n2) -> return $ Const (ConstI (n1 + n2))
-    Const (IfThenElse _) :@ Const (ConstB c) :@ success :@ failure ->
-      if c then return success else return failure
     n -> return n
 
 normalize (Abs scope) = do
