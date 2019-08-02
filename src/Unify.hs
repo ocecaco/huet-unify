@@ -2,6 +2,17 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Unify (unify, runUnify) where
 
+-- TODO: Perform eta-expansion on-the-fly, removing the need for eta
+-- normalization during unification
+
+-- TODO: Ensure the final substitution doesn't include any "new"
+-- variables, and that every substitution is normalized
+
+-- TODO: Maybe type-check the equations once before starting the
+-- unification process? Otherwise just let the user do it himself.
+
+-- TODO: Add a parser/pretty printer so we can easily write equations.
+
 import Syntax
 import Name
 import TCMonad
