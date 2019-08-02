@@ -38,9 +38,7 @@ decomposeRigidRigid ((t1, t2):rest) = do
           , isAtom hd1
           , (hd2, spine2) <- collectSpine tm2
           , isAtom hd2 = do
-              if hd1 == hd2 && length spine1 == length spine2
-                then return ()
-                else typeError "rigid-rigid mismatch"
+              guard $ hd1 == hd2 && length spine1 == length spine2
               return $ Just (zip spine1 spine2)
 
         rigidRigid _ _ = return Nothing
@@ -123,7 +121,7 @@ match eqs = do
       (m, subs) <- matchFlexRigid f
       -- non-deterministic choice, backtracking can occur to try
       -- different options
-      s <- tryFinite subs
+      s <- msum subs
       return (Just (m, s), applySubst m s decomposed)
 
 applySubst :: MetaVar -> Term -> Equations -> Equations

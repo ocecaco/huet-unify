@@ -4,7 +4,6 @@ module TCMonad
   , run
   , TypeError
   , typeError
-  , tryFinite
   )
 where
 
@@ -21,7 +20,7 @@ newtype TCState = TCState { _varCount :: Int }
 type TypeError = Text
 
 newtype TC a = TC { runTC :: LogicT (StateT TCState (ExceptT TypeError Identity)) a }
-             deriving (Functor, Applicative, Monad)
+             deriving (Functor, Applicative, Monad, Alternative, MonadPlus, MonadLogic)
 
 instance MonadFresh TC where
   fresh name = TC $ do
@@ -37,7 +36,3 @@ run act = runIdentity (runExceptT (evalStateT (observeT (runTC act)) initialStat
   where -- TODO: Remove the hardcoded 1000
         initialState :: TCState
         initialState = TCState 1000
-
--- TODO: Add some kind of error message
-tryFinite :: [TC a] -> TC a
-tryFinite acts = TC (msum (fmap runTC acts))
