@@ -34,11 +34,8 @@ type TermScope = Scope (Ignore Text, Ty) Term
 data MetaVar = MetaVar (Name Ty)
              deriving (Eq, Ord, Show)
 
-data Const = ConstI Int
-           | ConstB Bool
-           | Plus
-           | IfThenElse Ty
-           deriving (Eq, Ord, Show)
+data Const = C Text Ty
+            deriving (Eq, Ord, Show)
 
 data Term = Term :@ Term -- application
           | Abs TermScope -- lambda-abstraction
@@ -48,8 +45,7 @@ data Term = Term :@ Term -- application
           deriving (Eq, Ord, Show)
 
 data Ty = Ty :-> Ty
-        | Int
-        | Bool
+        | BaseTy Text
         deriving (Eq, Ord, Show)
 
 infixr :->

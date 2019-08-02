@@ -17,11 +17,7 @@ checkEqual ty1 ty2
 
 inferType :: Term -> TC Ty
 inferType (Meta (MetaVar name)) = return (nameInfo name)
-inferType (Const (ConstI _)) = return Int
-inferType (Const (ConstB _)) = return Bool
-inferType (Const Plus) = return (Int :-> Int :-> Int)
-inferType (Const (IfThenElse ty)) = return (Bool :-> ty :-> ty :-> ty)
-
+inferType (Const (C _ ty)) = return ty
 inferType (Var (Free name)) = return $ snd (nameInfo name)
 inferType (Var (Bound _ _)) = error "type checker encountered bound variable"
 
