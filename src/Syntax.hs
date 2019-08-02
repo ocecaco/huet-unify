@@ -13,8 +13,11 @@ module Syntax
   , substMeta
   , substVar
   , scopeName
-  , collectArgTypes
+  , argTypes
+  , resultType
+  , createArrowType
   , collectLambdas
+  , createLambdas
   , collectSpine
   , createSpine
   )
@@ -114,9 +117,16 @@ substVar varName = substTerm (Var (Free varName))
 scopeName :: MonadFresh m => TermScope -> m TermName
 scopeName (ManualScope (Ignore name, ty) _) = freshFromNameInfo (name, ty)
 
-collectArgTypes :: Ty -> [Ty]
-collectArgTypes (ty1 :-> ty2) = ty1 : collectArgTypes ty2
-collectArgTypes _ = []
+resultType ::Ty -> Ty
+resultType (_ :-> r) = resultType r
+resultType ty = ty
+
+argTypes :: Ty -> [Ty]
+argTypes (ty1 :-> ty2) = ty1 : argTypes ty2
+argTypes _ = []
+
+createArrowType :: [Ty] -> Ty -> Ty
+createArrowType argtys resty = foldr (:->) resty argtys
 
 type Binders = [TermName]
 type Spine = (Term, [Term])
@@ -127,6 +137,10 @@ collectLambdas (Abs scope) = do
   (rest, inner) <- collectLambdas body
   return (x:rest, inner)
 collectLambdas tm = return ([], tm)
+
+createLambdas :: Binders -> Term -> Term
+createLambdas binders tm = foldr addBinder tm binders
+  where addBinder bindname inner = Abs (bindTerm bindname inner)
 
 collectSpine :: Term -> Spine
 collectSpine t = go t []

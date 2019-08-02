@@ -33,5 +33,6 @@ typeError msg = TC (throwError msg)
 
 run :: TC a -> Either TypeError a
 run act = runIdentity (runExceptT (evalStateT (observeT (runTC act)) initialState))
-  where initialState :: TCState
-        initialState = TCState 0
+  where -- TODO: Remove the hardcoded 1000
+        initialState :: TCState
+        initialState = TCState 1000

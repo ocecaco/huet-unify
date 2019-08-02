@@ -33,18 +33,16 @@ normalizeTerm (Abs scope) = do
 etaExpand :: Term -> TC Term
 etaExpand tm = do
   ty <- inferType tm
-  let argTypes = collectArgTypes ty
+  let argTys = argTypes ty
   (binders, body) <- collectLambdas tm
   let (hd, args) = collectSpine body
 
-  let missingBinderTypes = drop (length binders) argTypes
+  let missingBinderTypes = drop (length binders) argTys
   missingBinderNames <- mapM (\bindty -> freshFromNameInfo ("eta", bindty)) missingBinderTypes
   let missingBinderVars = map (Var . Free) missingBinderNames
 
   argsExpanded <- mapM etaExpand (args ++ missingBinderVars)
   let newBinders = binders ++ missingBinderNames
 
-  let expanded = foldr addBinder (createSpine hd argsExpanded) newBinders
-        where addBinder bindname inner = Abs (bindTerm bindname inner)
-
+  let expanded = createLambdas newBinders (createSpine hd argsExpanded)
   return expanded
