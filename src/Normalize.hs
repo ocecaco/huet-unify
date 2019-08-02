@@ -1,32 +1,35 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Normalize (normalizeTerm, etaExpand) where
+module Normalize (normalize, etaExpand, normalizeEta) where
 
 import Syntax
 import TypeCheck
 import Name
 import TCMonad
 
-normalizeTerm :: Term -> TC Term
-normalizeTerm c@(Const _) = return c
-normalizeTerm m@(Meta _) = return m
-normalizeTerm tm@(Var (Free _)) = return tm
+normalize :: Term -> TC Term
+normalize c@(Const _) = return c
+normalize m@(Meta _) = return m
+normalize tm@(Var (Free _)) = return tm
 
-normalizeTerm (Var (Bound _ _)) = error "normalization encountered bound variable"
+normalize (Var (Bound _ _)) = error "normalization encountered bound variable"
 
-normalizeTerm (t1 :@ t2) = do
-  normt1 <- normalizeTerm t1
-  normt2 <- normalizeTerm t2
+normalize (t1 :@ t2) = do
+  normt1 <- normalize t1
+  normt2 <- normalize t2
   case normt1 :@ normt2 of
-    Abs scope :@ arg -> normalizeTerm (openTerm scope arg)
+    Abs scope :@ arg -> normalize (openTerm scope arg)
     Const Plus :@ Const (ConstI n1) :@ Const (ConstI n2) -> return $ Const (ConstI (n1 + n2))
     Const (IfThenElse _) :@ Const (ConstB c) :@ success :@ failure ->
       if c then return success else return failure
     n -> return n
 
-normalizeTerm (Abs scope) = do
+normalize (Abs scope) = do
   (x, body) <- unbindTerm scope
-  normbody <- normalizeTerm body
+  normbody <- normalize body
   return (Abs (bindTerm x normbody))
+
+normalizeEta :: Term -> TC Term
+normalizeEta tm = normalize tm >>= etaExpand
 
 -- Eta-expands a term, which is assumed to be already in beta-normal
 -- form
