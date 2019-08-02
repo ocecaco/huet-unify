@@ -34,7 +34,12 @@ decomposeRigidRigid ((t1, t2):rest) = do
         rigidRigid tm1 tm2
           | (TermRigid (Rigid hd1 spine1)) <- classifyTerm tm1
           , (TermRigid (Rigid hd2 spine2)) <- classifyTerm tm2 = do
-              guard $ hd1 == hd2 && length spine1 == length spine2
+              guard $ hd1 == hd2
+              -- don't need to check that the lengths of the spines
+              -- match, since this is ensured by the fact that the
+              -- equation is type-correct and both terms are
+              -- eta-expanded
+              -- guard $ length spine1 == length spine2
               return $ Just (zip spine1 spine2)
 
         rigidRigid _ _ = return Nothing
