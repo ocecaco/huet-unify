@@ -109,7 +109,8 @@ getSubstitutions mv argsTys hd = do
 
   return appliedAtom
 
-type Substitution = [(MetaVar, Term)]
+type Substitution = (MetaVar, Term)
+type Substitutions = [Substitution]
 
 separateEquations :: Equations -> ([(Flex, Rigid)],[(Flex, Flex)])
 separateEquations (e:es) = case classifyEquation e of
@@ -120,7 +121,7 @@ separateEquations (e:es) = case classifyEquation e of
 separateEquations [] = ([], [])
 
 data MatchResult = Done [(Flex, Flex)]
-                 | Continue (MetaVar, Term) Equations
+                 | Continue Substitution Equations
 
 match :: Equations -> TC MatchResult
 match eqs = do
@@ -136,7 +137,7 @@ match eqs = do
 applySubst :: MetaVar -> Term -> Equations -> Equations
 applySubst m sub = map (\(t1, t2) -> (substMeta m sub t1, substMeta m sub t2))
 
-unify :: Equations -> TC (Substitution, [(Flex, Flex)])
+unify :: Equations -> TC (Substitutions, [(Flex, Flex)])
 unify = go []
   where go subs eqs = do
           matchResult <- match eqs
