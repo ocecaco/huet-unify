@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module TCMonad
   ( TC
-  , run
+  , runTC
   , TypeError
   , typeError
   )
@@ -10,8 +10,6 @@ where
 import Control.Monad.Identity
 import Control.Monad.Except
 import Control.Monad.State.Strict
-import Control.Monad.Logic
-import Control.Applicative (Alternative)
 import Data.Text (Text)
 import Name
 
@@ -19,8 +17,8 @@ newtype TCState = TCState { _varCount :: Int }
 
 type TypeError = Text
 
-newtype TC a = TC { runTC :: LogicT (StateT TCState (ExceptT TypeError Identity)) a }
-             deriving (Functor, Applicative, Monad, Alternative, MonadPlus, MonadLogic)
+newtype TC a = TC { unTC :: StateT TCState (ExceptT TypeError Identity) a }
+             deriving (Functor, Applicative, Monad)
 
 instance MonadFresh TC where
   fresh name = TC $ do
@@ -31,8 +29,8 @@ instance MonadFresh TC where
 typeError :: Text -> TC a
 typeError msg = TC (throwError msg)
 
-run :: TC a -> Either TypeError a
-run act = runIdentity (runExceptT (evalStateT (observeT (runTC act)) initialState))
+runTC :: TC a -> Either TypeError a
+runTC act = runIdentity (runExceptT (evalStateT (unTC act) initialState))
   where -- TODO: Remove the hardcoded 1000
         initialState :: TCState
         initialState = TCState 1000

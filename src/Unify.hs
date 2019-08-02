@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Unify (unify) where
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+module Unify (unify, runUnify) where
 
 import Syntax
 import Name
@@ -7,27 +8,35 @@ import TCMonad
 import TypeCheck
 import Control.Monad
 import Normalize
+import Control.Monad.Logic
+import Control.Applicative (Alternative)
 
 type Equation = (Term, Term)
+
+newtype Unify a = Unify { _unUnify :: LogicT TC a }
+                deriving (Functor, Applicative, Monad, Alternative, MonadPlus, MonadLogic)
 
 -- both sides of every equation are assumed to always be normalized
 -- (including eta-long?)
 type Equations = [Equation]
 
-normalizeEquations :: Equations -> TC Equations
-normalizeEquations = mapM (\(t1, t2) -> (,) <$> normalizeEta t1 <*> normalizeEta t2)
+liftTC :: TC a -> Unify a
+liftTC = Unify . lift
 
-decomposeRigidRigid :: Equations -> TC Equations
+normalizeEquations :: Equations -> Unify Equations
+normalizeEquations = mapM (\(t1, t2) -> liftTC $ (,) <$> normalizeEta t1 <*> normalizeEta t2)
+
+decomposeRigidRigid :: Equations -> Unify Equations
 decomposeRigidRigid ((t1, t2):rest) = do
   expanded <- rigidRigid t1 t2
   case expanded of
     Just eqs -> decomposeRigidRigid (eqs ++ rest)
     Nothing -> ((t1,t2):) <$> decomposeRigidRigid rest
 
-  where rigidRigid :: Term -> Term -> TC (Maybe Equations)
+  where rigidRigid :: Term -> Term -> Unify (Maybe Equations)
         rigidRigid (Abs scope1) (Abs scope2) = do
           -- use the same variable to open both scopes
-          name <- scopeName scope1
+          name <- liftTC $ scopeName scope1
           let var = Var (Free name)
           return . Just $ [(openTerm scope1 var, openTerm scope2 var)]
 
@@ -46,7 +55,7 @@ decomposeRigidRigid ((t1, t2):rest) = do
 
 decomposeRigidRigid [] = return []
 
-simplify :: Equations -> TC Equations
+simplify :: Equations -> Unify Equations
 simplify eqs = normalizeEquations eqs >>= decomposeRigidRigid
 
 data Atom = AtomC Const -- constant
@@ -83,9 +92,9 @@ classifyEquation (t1, t2) = case (classifyTerm t1, classifyTerm t2) of
   (TermRigid r, TermFlex f) -> EqFlexRigid f r
   (TermFlex f1, TermFlex f2) -> EqFlexFlex f1 f2
 
-trySubstitution :: MetaVar -> [Ty] -> Atom -> TC Term
+trySubstitution :: MetaVar -> [Ty] -> Atom -> Unify Term
 trySubstitution mv argsTys hd = do
-  argNames <- mapM (\ty -> freshFromNameInfo ("x", ty)) argsTys
+  argNames <- mapM (\ty -> liftTC $ freshFromNameInfo ("x", ty)) argsTys
   let argVars = map (Var . Free) argNames
   -- we can only apply imitation when the rigid head is a constant
   -- (and not a free variable)
@@ -99,14 +108,14 @@ trySubstitution mv argsTys hd = do
 
   -- result type of the chosen atom should match the expected result
   -- type of the metavariable
-  atomType <- inferType chosenAtom
-  resty <- resultType <$> inferType (Meta mv)
+  atomType <- liftTC $ inferType chosenAtom
+  resty <- liftTC $ resultType <$> inferType (Meta mv)
   guard (resultType atomType == resty)
 
   -- create fresh meta variables of the proper type for the arguments
   -- of the chosen atom
   let atomArgTypes = argTypes atomType
-  metaNames <- mapM freshFromNameInfo [ createArrowType argsTys atomArgty | atomArgty <- atomArgTypes ]
+  metaNames <- mapM (liftTC . freshFromNameInfo) [ createArrowType argsTys atomArgty | atomArgty <- atomArgTypes ]
   let metaHeads = map (Meta . MetaVar) metaNames
   let appliedMetas = map (\metahd -> createSpine metahd argVars) metaHeads
 
@@ -128,24 +137,30 @@ separateEquations [] = ([], [])
 data MatchResult = Done [(Flex, Flex)]
                  | Continue Substitution Equations
 
-match :: Equations -> TC MatchResult
+match :: Equations -> Unify MatchResult
 match eqs = do
   simplified <- simplify eqs
   let (flexrigid, flexflex) = separateEquations simplified
   case flexrigid of
     [] -> return (Done flexflex)
     ((Flex m args1, Rigid a _):_) -> do
-      args1types <- mapM inferType args1
+      args1types <- mapM (liftTC . inferType) args1
       s <- trySubstitution m args1types a
       return (Continue (m, s) (applySubst m s simplified))
 
 applySubst :: MetaVar -> Term -> Equations -> Equations
 applySubst m sub = map (\(t1, t2) -> (substMeta m sub t1, substMeta m sub t2))
 
-unify :: Equations -> TC (Substitutions, [(Flex, Flex)])
+unify :: Equations -> Unify (Substitutions, [(Flex, Flex)])
 unify = go []
   where go subs eqs = do
           matchResult <- match eqs
           case matchResult of
             Done flexflex -> return (subs, flexflex)
             Continue sub newEqs -> go (sub:subs) newEqs
+
+runUnify :: Maybe Int -> Unify a -> Either TypeError [a]
+runUnify maybeBound (Unify act) = runTC (runner act)
+  where runner x = case maybeBound of
+          Just b -> observeManyT b x
+          Nothing -> observeAllT x
