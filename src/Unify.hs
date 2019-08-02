@@ -78,8 +78,8 @@ classifyEquation (t1, t2) = case (classifyTerm t1, classifyTerm t2) of
   (TermRigid r, TermFlex f) -> EqFlexRigid f r
   (TermFlex f1, TermFlex f2) -> EqFlexFlex f1 f2
 
-getSubstitutions :: MetaVar -> [Ty] -> Atom -> TC Term
-getSubstitutions mv argsTys hd = do
+trySubstitution :: MetaVar -> [Ty] -> Atom -> TC Term
+trySubstitution mv argsTys hd = do
   argNames <- mapM (\ty -> freshFromNameInfo ("x", ty)) argsTys
   let argVars = map (Var . Free) argNames
   -- we can only apply imitation when the rigid head is a constant
@@ -131,7 +131,7 @@ match eqs = do
     [] -> return (Done flexflex)
     ((Flex m args1, Rigid a _):_) -> do
       args1types <- mapM inferType args1
-      s <- getSubstitutions m args1types a
+      s <- trySubstitution m args1types a
       return (Continue (m, s) (applySubst m s simplified))
 
 applySubst :: MetaVar -> Term -> Equations -> Equations
