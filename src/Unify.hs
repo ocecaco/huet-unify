@@ -7,7 +7,6 @@ import TCMonad
 import TypeCheck
 import Control.Monad
 import Normalize
-import Data.List (partition)
 
 type Equation = (Term, Term)
 
@@ -16,16 +15,15 @@ type Equation = (Term, Term)
 type Equations = [Equation]
 
 normalizeEquations :: Equations -> TC Equations
-normalizeEquations eqs = mapM (\(t1, t2) -> (,) <$> normalizeEta t1 <*> normalizeEta t2) eqs
+normalizeEquations = mapM (\(t1, t2) -> (,) <$> normalizeEta t1 <*> normalizeEta t2)
 
 decomposeRigidRigid :: Equations -> TC Equations
 decomposeRigidRigid ((t1, t2):rest) = do
   expanded <- rigidRigid t1 t2
   case expanded of
     Just eqs -> decomposeRigidRigid (eqs ++ rest)
-    Nothing -> do
-      srest <- decomposeRigidRigid rest
-      return ((t1, t2):srest)
+    Nothing -> ((t1,t2):) <$> decomposeRigidRigid rest
+
   where rigidRigid :: Term -> Term -> TC (Maybe Equations)
         rigidRigid (Abs scope1) (Abs scope2) = do
           -- use the same variable to open both scopes
@@ -34,10 +32,8 @@ decomposeRigidRigid ((t1, t2):rest) = do
           return . Just $ [(openTerm scope1 var, openTerm scope2 var)]
 
         rigidRigid tm1 tm2
-          | (hd1, spine1) <- collectSpine tm1
-          , isAtom hd1
-          , (hd2, spine2) <- collectSpine tm2
-          , isAtom hd2 = do
+          | (TermRigid (Rigid hd1 spine1)) <- classifyTerm tm1
+          , (TermRigid (Rigid hd2 spine2)) <- classifyTerm tm2 = do
               guard $ hd1 == hd2 && length spine1 == length spine2
               return $ Just (zip spine1 spine2)
 
@@ -45,28 +41,39 @@ decomposeRigidRigid ((t1, t2):rest) = do
 
 decomposeRigidRigid [] = return []
 
-isAtom :: Term -> Bool
-isAtom (Var (Free _)) = True
-isAtom (Const _) = True
-isAtom (Var (Bound _ _)) = error "unification encountered bound variable"
-isAtom _ = False
+simplify :: Equations -> TC Equations
+simplify eqs = normalizeEquations eqs >>= decomposeRigidRigid
 
-matchFlexRigid :: Equation -> TC (MetaVar, [TC Term])
-matchFlexRigid (t1, t2)
-  | (Meta m, args1) <- collectSpine t1
-  , (hd, _) <- collectSpine t2
-  , isAtom hd = fmap (\subs -> (m, subs)) $ getSubstitutions m args1 hd
+data Atom = AtomC Const -- constant
+          | AtomV TermName -- free variable
+          deriving (Eq, Ord, Show)
 
-matchFlexRigid (t2, t1)
-  | (Meta m, args1) <- collectSpine t1
-  , (hd, _) <- collectSpine t2
-  , isAtom hd = fmap (\subs -> (m, subs)) $ getSubstitutions m args1 hd
+data Flex = Flex MetaVar [Term]
+data Rigid = Rigid Atom [Term]
 
-matchFlexRigid _ = error "matchFlexRigid applied to flex-flex equations"
+data ClassifiedTerm = TermFlex Flex
+                    | TermRigid Rigid
 
-isConst :: Term -> Bool
-isConst (Const _) = True
-isConst _ = False
+data ClassifiedEquation = EqRigidRigid Rigid Rigid
+                        | EqFlexRigid Flex Rigid
+                        | EqFlexFlex Flex Flex
+
+classifyTerm :: Term -> ClassifiedTerm
+classifyTerm t = case hd of
+  _ :@ _ -> error "unexpected application in head of term"
+  Abs _ -> error "unexpected lambda in head of term"
+  Var (Bound _ _) -> error "unexpected bound variable in head of term"
+  Var (Free name) -> TermRigid (Rigid (AtomV name) spine)
+  Const c -> TermRigid (Rigid (AtomC c) spine)
+  Meta m -> TermFlex (Flex m spine)
+  where (hd, spine) = collectSpine t
+
+classifyEquation :: Equation -> ClassifiedEquation
+classifyEquation (t1, t2) = case (classifyTerm t1, classifyTerm t2) of
+  (TermRigid r1, TermRigid r2) -> EqRigidRigid r1 r2
+  (TermFlex f, TermRigid r) -> EqFlexRigid f r
+  (TermRigid r, TermFlex f) -> EqFlexRigid f r
+  (TermFlex f1, TermFlex f2) -> EqFlexFlex f1 f2
 
 tryAtom :: [TermName] -> Term -> TC Term
 tryAtom argNames chosenAtom = do
@@ -85,7 +92,7 @@ tryAtom argNames chosenAtom = do
 
   return appliedAtom
 
-getSubstitutions :: MetaVar -> [Term] -> Term -> TC [TC Term]
+getSubstitutions :: MetaVar -> [Term] -> Atom -> TC [TC Term]
 getSubstitutions mv args1 hd = do
   args1types <- mapM inferType args1
   args1names <- mapM (\ty -> freshFromNameInfo ("x", ty)) args1types
@@ -97,7 +104,9 @@ getSubstitutions mv args1 hd = do
 
   -- we can only apply imitation when the rigid head is a constant
   -- (and not a free variable)
-  let imitateVar = if isConst hd then [hd] else []
+  let imitateVar = case hd of
+        AtomC c -> [Const c]
+        _ -> []
 
   -- this is where a non-deterministic choice happens. hence this is subject to backtracking.
   let possibleAtoms = projVars ++ imitateVar
@@ -105,32 +114,39 @@ getSubstitutions mv args1 hd = do
 
 type Substitution = [(MetaVar, Term)]
 
-isFlexible :: Term -> Bool
-isFlexible (Meta _) = True
-isFlexible (t :@ _) = isFlexible t
-isFlexible _ = False
+separateEquations :: Equations -> ([(Flex, Rigid)],[(Flex, Flex)])
+separateEquations (e:es) = case classifyEquation e of
+  EqRigidRigid _ _ -> error "separateEquations found rigid-rigid equation"
+  EqFlexRigid f r -> ((f,r):fr, ff)
+  EqFlexFlex f1 f2 -> (fr, (f1,f2):ff)
+  where (fr, ff) = separateEquations es
+separateEquations [] = ([], [])
 
-match :: Equations -> TC (Maybe (MetaVar, Term), Equations)
+data MatchResult = Done [(Flex, Flex)]
+                 | Continue (MetaVar, Term) Equations
+
+match :: Equations -> TC MatchResult
 match eqs = do
-  eqsNormalized <- normalizeEquations eqs
-  decomposed <- decomposeRigidRigid eqsNormalized
-  let (flexflex, flexrigid) = partition (\(t1, t2) -> isFlexible t1 && isFlexible t2) decomposed
+  simplified <- simplify eqs
+  let (flexrigid, flexflex) = separateEquations simplified
   case flexrigid of
-    [] -> return (Nothing, flexflex)
-    (f:_) -> do
-      (m, subs) <- matchFlexRigid f
+    [] -> return (Done flexflex)
+    ((Flex m args1, Rigid a _):_) -> do
+      subs <- getSubstitutions m args1 a
+
       -- non-deterministic choice, backtracking can occur to try
       -- different options
       s <- msum subs
-      return (Just (m, s), applySubst m s decomposed)
+
+      return (Continue (m, s) (applySubst m s simplified))
 
 applySubst :: MetaVar -> Term -> Equations -> Equations
 applySubst m sub = map (\(t1, t2) -> (substMeta m sub t1, substMeta m sub t2))
 
-unify :: Equations -> TC (Substitution, Equations)
+unify :: Equations -> TC (Substitution, [(Flex, Flex)])
 unify = go []
   where go subs eqs = do
-          (maybeSub, newEqs) <- match eqs
-          case maybeSub of
-            Nothing -> return (subs, newEqs)
-            Just sub -> go (sub:subs) newEqs
+          matchResult <- match eqs
+          case matchResult of
+            Done flexflex -> return (subs, flexflex)
+            Continue sub newEqs -> go (sub:subs) newEqs
