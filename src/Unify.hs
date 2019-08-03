@@ -31,8 +31,8 @@ type Equations = [Equation]
 liftTC :: TC a -> Unify a
 liftTC = Unify . lift
 
-normalizeEquations :: Equations -> Unify Equations
-normalizeEquations = mapM (\(t1, t2) -> liftTC $ (,) <$> normalize t1 <*> normalize t2)
+normalizeEquations :: Equations -> TC Equations
+normalizeEquations = mapM (\(t1, t2) -> (,) <$> normalizeEta t1 <*> normalizeEta t2)
 
 decomposeRigidRigid :: Equations -> Unify Equations
 decomposeRigidRigid ((t1, t2):rest) = do
@@ -47,15 +47,6 @@ decomposeRigidRigid ((t1, t2):rest) = do
           name <- liftTC $ scopeName scope1
           let var = Var (Free name)
           return . Just $ [(openTerm scope1 var, openTerm scope2 var)]
-
-        -- perform eta-expansion on the fly
-        rigidRigid (Abs scope) tm = do
-          (x, body) <- liftTC $ unbindTerm scope
-          return $ Just [(body, tm :@ Var (Free x))]
-
-        rigidRigid tm (Abs scope) = do
-          (x, body) <- liftTC $ unbindTerm scope
-          return $ Just [(tm :@ Var (Free x), body)]
 
         rigidRigid tm1 tm2
           | (TermRigid (Rigid hd1 spine1)) <- classifyTerm tm1
@@ -163,7 +154,7 @@ match eqs = do
       Continue (m, s) <$> liftTC (applySubstEquations m s decomposed)
 
 applySubstEquations :: MetaVar -> Term -> Equations -> TC Equations
-applySubstEquations m sub = mapM (\(t1, t2) -> (,) <$> normalize (substMeta m sub t1) <*> normalize (substMeta m sub t2))
+applySubstEquations m sub eqs = normalizeEquations (map (\(t1, t2) -> (substMeta m sub t1, substMeta m sub t2)) eqs)
 
 applySubstSubstitutions :: MetaVar -> Term -> Substitutions -> TC Substitutions
 applySubstSubstitutions m sub = mapM (\(m2, t) -> (m2,) <$> normalize (substMeta m sub t))
@@ -176,7 +167,7 @@ unify originalEqs = do
   -- normalize the equations once at the beginning. afterwards, the
   -- equations are kept normalized by normalizing them every time we
   -- perform a substitution for some meta-variables
-  normalized <- normalizeEquations originalEqs
+  normalized <- liftTC $ normalizeEquations originalEqs
   let relevantMetaVars = metaVarsEquations normalized
   go relevantMetaVars [] normalized
   where go relevant oldSubs eqs = do
