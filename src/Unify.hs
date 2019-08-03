@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Unify (unify, runUnify) where
 
@@ -166,10 +167,13 @@ match eqs = do
     ((Flex m args1, Rigid a _):_) -> do
       args1types <- mapM (liftTC . inferType) args1
       s <- trySubstitution m args1types a
-      return (Continue (m, s) (applySubst m s simplified))
+      return (Continue (m, s) (applySubstEquations m s simplified))
 
-applySubst :: MetaVar -> Term -> Equations -> Equations
-applySubst m sub = map (\(t1, t2) -> (substMeta m sub t1, substMeta m sub t2))
+applySubstEquations :: MetaVar -> Term -> Equations -> Equations
+applySubstEquations m sub = map (\(t1, t2) -> (substMeta m sub t1, substMeta m sub t2))
+
+applySubstSubstitutions :: MetaVar -> Term -> Substitutions -> TC Substitutions
+applySubstSubstitutions m sub = mapM (\(m2, t) -> (m2,) <$> normalize (substMeta m sub t))
 
 unify :: Equations -> Unify (Substitutions, [(Flex, Flex)])
 unify = go []
@@ -177,7 +181,9 @@ unify = go []
           matchResult <- match eqs
           case matchResult of
             Done flexflex -> return (subs, flexflex)
-            Continue sub newEqs -> go (sub:subs) newEqs
+            Continue (m,s) newEqs -> do
+              newSubs <- ((m,s):) <$> liftTC (applySubstSubstitutions m s subs)
+              go newSubs newEqs
 
 runUnify :: Maybe Int -> Unify a -> Either TypeError [a]
 runUnify maybeBound (Unify act) = runTC (runner act)
