@@ -76,9 +76,6 @@ decomposeRigidRigid ((t1, t2):rest) = do
 
 decomposeRigidRigid [] = return []
 
-simplify :: Equations -> Unify Equations
-simplify eqs = normalizeEquations eqs >>= decomposeRigidRigid
-
 data Atom = AtomC Const -- constant
           | AtomV TermName -- free variable
           deriving (Eq, Ord, Show)
@@ -160,23 +157,28 @@ data MatchResult = Done [(Flex, Flex)]
 
 match :: Equations -> Unify MatchResult
 match eqs = do
-  simplified <- simplify eqs
-  let (flexrigid, flexflex) = separateEquations simplified
+  decomposed <- decomposeRigidRigid eqs
+  let (flexrigid, flexflex) = separateEquations decomposed
   case flexrigid of
     [] -> return (Done flexflex)
     ((Flex m args1, Rigid a _):_) -> do
       args1types <- mapM (liftTC . inferType) args1
       s <- trySubstitution m args1types a
-      return (Continue (m, s) (applySubstEquations m s simplified))
+      Continue (m, s) <$> liftTC (applySubstEquations m s decomposed)
 
-applySubstEquations :: MetaVar -> Term -> Equations -> Equations
-applySubstEquations m sub = map (\(t1, t2) -> (substMeta m sub t1, substMeta m sub t2))
+applySubstEquations :: MetaVar -> Term -> Equations -> TC Equations
+applySubstEquations m sub = mapM (\(t1, t2) -> (,) <$> normalize (substMeta m sub t1) <*> normalize (substMeta m sub t2))
 
 applySubstSubstitutions :: MetaVar -> Term -> Substitutions -> TC Substitutions
 applySubstSubstitutions m sub = mapM (\(m2, t) -> (m2,) <$> normalize (substMeta m sub t))
 
 unify :: Equations -> Unify (Substitutions, [(Flex, Flex)])
-unify = go []
+unify originalEqs = do
+  -- normalize the equations once at the beginning. afterwards, the
+  -- equations are kept normalized by normalizing them every time we
+  -- perform a substitution for some meta-variables
+  normalized <- normalizeEquations originalEqs
+  go [] normalized
   where go subs eqs = do
           matchResult <- match eqs
           case matchResult of
