@@ -35,7 +35,7 @@ liftTC :: TC a -> Unify a
 liftTC = Unify . lift
 
 normalizeEquations :: Equations -> Unify Equations
-normalizeEquations = mapM (\(t1, t2) -> liftTC $ (,) <$> normalizeEta t1 <*> normalizeEta t2)
+normalizeEquations = mapM (\(t1, t2) -> liftTC $ (,) <$> normalize t1 <*> normalize t2)
 
 decomposeRigidRigid :: Equations -> Unify Equations
 decomposeRigidRigid ((t1, t2):rest) = do
@@ -50,6 +50,15 @@ decomposeRigidRigid ((t1, t2):rest) = do
           name <- liftTC $ scopeName scope1
           let var = Var (Free name)
           return . Just $ [(openTerm scope1 var, openTerm scope2 var)]
+
+        -- perform eta-expansion on the fly
+        rigidRigid (Abs scope) tm = do
+          (x, body) <- liftTC $ unbindTerm scope
+          return $ Just [(body, tm :@ Var (Free x))]
+
+        rigidRigid tm (Abs scope) = do
+          (x, body) <- liftTC $ unbindTerm scope
+          return $ Just [(tm :@ Var (Free x), body)]
 
         rigidRigid tm1 tm2
           | (TermRigid (Rigid hd1 spine1)) <- classifyTerm tm1
