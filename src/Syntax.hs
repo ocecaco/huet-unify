@@ -12,6 +12,7 @@ module Syntax
   , substTerm
   , substMeta
   , substVar
+  , metaVars
   , scopeName
   , argTypes
   , resultType
@@ -25,6 +26,8 @@ where
 
 import Data.Text (Text)
 import Data.List (foldl')
+import qualified Data.Set as S
+import Data.Set (Set)
 import Name
 
 type TermName = Name (Text, Ty)
@@ -109,6 +112,13 @@ substMeta metaId = substTerm (Meta metaId)
 
 substVar :: TermName -> Term -> Term -> Term
 substVar varName = substTerm (Var (Free varName))
+
+metaVars :: Term -> Set MetaVar
+metaVars (t1 :@ t2) = metaVars t1 `S.union` metaVars t2
+metaVars (Abs (ManualScope _ body)) = metaVars body
+metaVars (Meta m) = S.singleton m
+metaVars (Var _) = S.empty
+metaVars (Const _) = S.empty
 
 scopeName :: MonadFresh m => TermScope -> m TermName
 scopeName (ManualScope (Ignore name, ty) _) = freshFromNameInfo (name, ty)

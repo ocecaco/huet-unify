@@ -22,6 +22,8 @@ import Control.Monad
 import Normalize
 import Control.Monad.Logic
 import Control.Applicative (Alternative)
+import qualified Data.Set as S
+import Data.Set (Set)
 
 type Equation = (Term, Term)
 
@@ -172,20 +174,31 @@ applySubstEquations m sub = mapM (\(t1, t2) -> (,) <$> normalize (substMeta m su
 applySubstSubstitutions :: MetaVar -> Term -> Substitutions -> TC Substitutions
 applySubstSubstitutions m sub = mapM (\(m2, t) -> (m2,) <$> normalize (substMeta m sub t))
 
+metaVarsEquations :: Equations -> Set MetaVar
+metaVarsEquations eqs = S.unions (map (\(t1, t2) -> metaVars t1 `S.union` metaVars t2) eqs)
+
 unify :: Equations -> Unify (Substitutions, [(Flex, Flex)])
 unify originalEqs = do
   -- normalize the equations once at the beginning. afterwards, the
   -- equations are kept normalized by normalizing them every time we
   -- perform a substitution for some meta-variables
   normalized <- normalizeEquations originalEqs
-  go [] normalized
-  where go subs eqs = do
+  let relevantMetaVars = metaVarsEquations normalized
+  go relevantMetaVars [] normalized
+  where go relevant oldSubs eqs = do
           matchResult <- match eqs
           case matchResult of
-            Done flexflex -> return (subs, flexflex)
-            Continue (m,s) newEqs -> do
-              newSubs <- ((m,s):) <$> liftTC (applySubstSubstitutions m s subs)
-              go newSubs newEqs
+            Done flexflex -> return (oldSubs, flexflex)
+            Continue (m,s) newEqs
+              -- only keep track of this substitution if it pertains
+              -- to a metavariable that was originally in the
+              -- equations (and not generated along the way)
+              | m `S.member` relevant -> do
+                  newSubs <- ((m,s):) <$> liftTC (applySubstSubstitutions m s oldSubs)
+                  go relevant newSubs newEqs
+              | otherwise -> do
+                  newSubs <- liftTC (applySubstSubstitutions m s oldSubs)
+                  go relevant newSubs newEqs
 
 runUnify :: Maybe Int -> Unify a -> Either TypeError [a]
 runUnify maybeBound (Unify act) = runTC (runner act)
