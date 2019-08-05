@@ -121,7 +121,7 @@ metaVars (Var _) = S.empty
 metaVars (Const _) = S.empty
 
 scopeName :: MonadFresh m => TermScope -> m TermName
-scopeName (ManualScope (Ignore name, ty) _) = freshFromNameInfo (name, ty)
+scopeName (ManualScope (Ignore name, ty) _) = fresh (name, ty)
 
 resultType ::Ty -> Ty
 resultType (_ :-> r) = resultType r

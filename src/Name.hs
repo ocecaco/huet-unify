@@ -6,17 +6,16 @@ module Name
   , Scope(..)
   , Ignore(..)
   , MonadFresh(..)
-  , freshFromNameInfo
+  , freshFromName
   )
 where
 
-data Name a = Name a Int
+import Data.Text (Text)
+
+data Name a = Name { nameInfo :: a, nameId :: Int, nameTag :: Text }
             deriving (Eq, Ord, Show)
 
-nameInfo :: Name a -> a
-nameInfo (Name raw _) = raw
-
-manualName :: a -> Int -> Name a
+manualName :: a -> Int -> Text -> Name a
 manualName = Name
 
 data Var f b = Free (Name f)
@@ -36,7 +35,7 @@ instance Ord (Ignore a) where
   _ `compare` _ = EQ
 
 class Monad m => MonadFresh m where
-  fresh :: Name f -> m (Name f)
+  fresh :: f -> m (Name f)
 
-freshFromNameInfo :: MonadFresh m => f -> m (Name f)
-freshFromNameInfo raw = fresh (Name raw 0)
+freshFromName :: MonadFresh m => Name f -> m (Name f)
+freshFromName name = fresh (nameInfo name)

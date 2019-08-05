@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 module TCMonad
   ( TC
   , runTC
@@ -24,13 +25,12 @@ instance MonadFresh TC where
   fresh name = TC $ do
     TCState count <- get
     put (TCState (count + 1))
-    return (manualName (nameInfo name) count)
+    return (manualName name count "typechecker")
 
 typeError :: Text -> TC a
 typeError msg = TC (throwError msg)
 
 runTC :: TC a -> Either TypeError a
 runTC act = runIdentity (runExceptT (evalStateT (unTC act) initialState))
-  where -- TODO: Remove the hardcoded 1000
-        initialState :: TCState
-        initialState = TCState 1000
+  where initialState :: TCState
+        initialState = TCState 0

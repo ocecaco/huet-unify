@@ -99,7 +99,7 @@ classifyEquation (t1, t2) = case (classifyTerm t1, classifyTerm t2) of
 
 trySubstitution :: MetaVar -> [Ty] -> Atom -> Unify Term
 trySubstitution mv argsTys hd = do
-  argNames <- mapM (\ty -> liftTC $ freshFromNameInfo ("x", ty)) argsTys
+  argNames <- mapM (\ty -> liftTC $ fresh ("x", ty)) argsTys
   let argVars = map (Var . Free) argNames
   -- we can only apply imitation when the rigid head is a constant
   -- (and not a free variable)
@@ -120,7 +120,7 @@ trySubstitution mv argsTys hd = do
   -- create fresh meta variables of the proper type for the arguments
   -- of the chosen atom
   let atomArgTypes = argTypes atomType
-  metaNames <- mapM (liftTC . freshFromNameInfo) [ createArrowType argsTys atomArgty | atomArgty <- atomArgTypes ]
+  metaNames <- mapM (liftTC . fresh) [ createArrowType argsTys atomArgty | atomArgty <- atomArgTypes ]
   let metaHeads = map (Meta . MetaVar) metaNames
   let appliedMetas = map (\metahd -> createSpine metahd argVars) metaHeads
 
