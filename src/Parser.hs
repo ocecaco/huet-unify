@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Parser (parseProblem, convertProblem) where
+module Parser (parseProblem, convertProblem, ProblemDescription) where
 
 import Text.Megaparsec (Parsec, try, notFollowedBy, between, eof, parse, errorBundlePretty, sepBy1, endBy, some)
 import Text.Megaparsec.Char (space1, string, letterChar, alphaNumChar, char)
@@ -104,27 +104,19 @@ baseType :: Parser S.Ty
 baseType = S.BaseTy <$> identifier
 
 type_ :: Parser S.Ty
-type_ = makeExprParser baseType
+type_ = makeExprParser (baseType <|> parens type_)
   [ [ InfixR ((S.:->) <$ symbol "->") ] ]
 
 problem :: Parser ProblemDescription
-problem = do
-  h <- header
-  eqs <- equations
-  return $ ProblemDescription h eqs
+problem = ProblemDescription <$> header <*> equations
 
 header :: Parser ProblemHeader
-header = do
-  tys <- types
-  cs <- constants
-  ms <- metavariables
-  return $ ProblemHeader tys cs ms
+header = ProblemHeader <$> types <*> constants <*> metavariables
 
 types :: Parser [Text]
 types = do
   rword "types"
-  tys <- identifier `endBy` symbol ";"
-  return tys
+  identifier `endBy` symbol ";"
 
 decl :: Parser (Text, S.Ty)
 decl = do
@@ -162,9 +154,6 @@ parseProblem :: Text -> Either Text ProblemDescription
 parseProblem source = case parse (between sc eof problem) "<interactive>" source of
   Left e -> Left (T.pack (errorBundlePretty e))
   Right t -> Right t
-    -- case undefined t of
-    -- Left (OutOfScope name) -> Left $ "variable out of scope: " <> name
-    -- Right t2 -> Right t2
 
 lookupName :: Map Text S.Term -> [Text] -> Text -> Maybe S.Term
 lookupName topLevel locals name = lookupTopLevel `mplus` lookupLocal
@@ -197,6 +186,8 @@ convertProblem desc = do
 
   forM_ consts $ \(_, ty) -> checkTy knownTypes ty
   forM_ metaVars $ \(_, ty) -> checkTy knownTypes ty
+
+  -- TODO: Check for duplicates between constants and metavariables
 
   -- TODO: the following line is kind of ugly
   freshMetaVars <- mapM (\(name, ty) -> (\m -> (name, S.Meta (S.MetaVar m))) <$> fresh ty) metaVars

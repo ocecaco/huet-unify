@@ -1,0 +1,15 @@
+types
+  int;
+constants
+  plus : int -> int -> int;
+  zero : int;
+  one : int;
+  two : int;
+metavariables
+  F : (int -> int -> int) -> int -> int;
+  G : int -> int -> int;
+equations
+  F G zero == plus zero zero;
+  F G one == plus one one;
+  G zero two == plus zero two;
+  fun x : int => x == fun x : int => x;

@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module TypeCheck
   ( inferType
+  , checkEqual
   )
 where
 

@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module Unify (unify, runUnify) where
+module Unify (unify, typeCheckThenUnify, runUnify, liftTC, Unify) where
 
 -- TODO: Maybe type-check the equations once before starting the
 -- unification process? Otherwise just let the user do it himself.
@@ -184,6 +184,14 @@ unify originalEqs = do
               | otherwise -> do
                   newSubs <- liftTC (applySubstSubstitutions m s oldSubs)
                   go relevant newSubs newEqs
+
+typeCheckThenUnify :: Equations -> Unify Substitutions
+typeCheckThenUnify eqs = do
+  liftTC $ forM_ eqs $ \(t1, t2) -> do
+    ty1 <- inferType t1
+    ty2 <- inferType t2
+    checkEqual ty1 ty2
+  fst <$> unify eqs
 
 runUnify :: Maybe Int -> Unify a -> Either TCError [a]
 runUnify maybeBound (Unify act) = runTC (runner act)

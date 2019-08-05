@@ -18,6 +18,7 @@ newtype TCState = TCState { _varCount :: Int }
 
 data TCError = TypeError Text
              | ScopeError Text
+             deriving (Eq, Ord, Show)
 
 newtype TC a = TC { unTC :: StateT TCState (ExceptT TCError Identity) a }
              deriving (Functor, Applicative, Monad)
