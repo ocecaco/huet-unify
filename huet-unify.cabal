@@ -18,13 +18,15 @@ build-type:          Simple
 extra-source-files:  CHANGELOG.md
 
 library
-  exposed-modules:     Syntax
+  exposed-modules:     Main
+                     , Syntax
                      , SyntaxHelper
                      , TypeCheck
                      , Normalize
                      , Unify
                      , Name
                      , TCMonad
+                     , Parser
   -- other-modules:
   -- other-extensions:
   build-depends:       base
@@ -32,6 +34,8 @@ library
                      , mtl
                      , containers
                      , logict
+                     , megaparsec
+                     , parser-combinators
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wall -Wmissing-export-lists

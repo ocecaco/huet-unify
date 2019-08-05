@@ -6,14 +6,14 @@ where
 
 import Syntax
 import SyntaxHelper
-import TCMonad (TC, typeError)
+import TCMonad (TC, typeError, TCError(..))
 import Name
 import qualified Data.Text as T
 
 checkEqual :: Ty -> Ty -> TC ()
 checkEqual ty1 ty2
   | ty1 == ty2 = return ()
-  | otherwise = typeError "type mismatch"
+  | otherwise = typeError . TypeError $ "type mismatch"
 
 inferType :: Term -> TC Ty
 inferType (Meta (MetaVar name)) = return (nameInfo name)
@@ -34,4 +34,4 @@ inferType (fun :@ arg) = do
     argty :-> resultty -> do
       checkEqual argty actualty
       return resultty
-    _ -> typeError $ "expected function type, got " <> T.pack (show funty)
+    _ -> typeError . TypeError $ "expected function type, got " <> T.pack (show funty)

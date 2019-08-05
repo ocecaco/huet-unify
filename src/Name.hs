@@ -10,12 +10,10 @@ module Name
   )
 where
 
-import Data.Text (Text)
-
-data Name a = Name { nameInfo :: a, nameId :: Int, nameTag :: Text }
+data Name a = Name { nameInfo :: a, nameId :: Int }
             deriving (Eq, Ord, Show)
 
-manualName :: a -> Int -> Text -> Name a
+manualName :: a -> Int -> Name a
 manualName = Name
 
 data Var f b = Free (Name f)

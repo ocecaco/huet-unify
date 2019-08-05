@@ -185,7 +185,7 @@ unify originalEqs = do
                   newSubs <- liftTC (applySubstSubstitutions m s oldSubs)
                   go relevant newSubs newEqs
 
-runUnify :: Maybe Int -> Unify a -> Either TypeError [a]
+runUnify :: Maybe Int -> Unify a -> Either TCError [a]
 runUnify maybeBound (Unify act) = runTC (runner act)
   where runner x = case maybeBound of
           Just b -> observeManyT b x
